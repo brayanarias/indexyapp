@@ -34,7 +34,15 @@ socket.addEventListener('message', async event => {
     } else if (data.type === 'new-user') {
         console.log('Nuevo usuario conectado:', data.id);
         callUser(data.id);
+    } else if (data.type === 'user-disconnected') {
+    console.log('Usuario desconectado:', data.id);
+    const videoToRemove = document.getElementById(`video-${data.id}`);
+    if (videoToRemove) {
+        videoToRemove.remove();
     }
+    delete peers[data.id];
+}
+
 });
 
 function createPeerConnection(id) {
@@ -45,24 +53,18 @@ function createPeerConnection(id) {
     });
 
     peerConnection.ontrack = event => {
-        let remoteVideo = document.getElementById(`remoteVideo-${id}`);
+    const remoteVideo = document.createElement('video');
+    remoteVideo.id = `video-${id}`; // <-- Agregado: identificador único
+    remoteVideo.srcObject = event.streams[0];
+    remoteVideo.autoplay = true;
+    remoteVideo.playsInline = true;
+    remoteVideo.style.width = '300px';
+    remoteVideo.style.height = '300px';
+    remoteVideo.style.border = '2px solid green';
+    remoteVideo.style.margin = '10px';
+    remoteVideosContainer.appendChild(remoteVideo);
+};
 
-        if (!remoteVideo) {
-            remoteVideo = document.createElement('video');
-            remoteVideo.id = `remoteVideo-${id}`;
-            remoteVideo.autoplay = true;
-            remoteVideo.playsInline = true;
-            remoteVideo.style.width = '300px';
-            remoteVideo.style.height = '300px';
-            remoteVideo.style.border = '2px solid green';
-            remoteVideo.style.margin = '10px';
-            remoteVideo.style.display = 'none'; // Inicialmente oculto
-            remoteVideosContainer.appendChild(remoteVideo);
-
-            remoteVideo.onloadedmetadata = () => {
-                remoteVideo.style.display = 'block'; // Mostrar solo cuando tiene datos
-            };
-        }
 
         remoteVideo.srcObject = event.streams[0];
 
