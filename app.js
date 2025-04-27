@@ -18,6 +18,7 @@ socket.addEventListener('message', async event => {
 
     if (data.type === 'id') {
         console.log('Tu ID es:', data.id);
+        localStorage.setItem('userID', data.id);  // Guardamos nuestro ID
     } else if (data.type === 'offer') {
         const peerConnection = createPeerConnection(data.from);
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
@@ -38,11 +39,7 @@ socket.addEventListener('message', async event => {
         callUser(data.id);
     } else if (data.type === 'user-disconnected') {
         console.log('Usuario desconectado:', data.id);
-        const videoToRemove = document.getElementById(`video-${data.id}`);
-        if (videoToRemove) {
-            videoToRemove.remove();
-        }
-        delete peers[data.id];
+        removePeer(data.id);
     }
 });
 
@@ -53,17 +50,18 @@ function createPeerConnection(id) {
         peerConnection.addTrack(track, localStream);
     });
 
+    const remoteVideo = document.createElement('video');
+    remoteVideo.autoplay = true;
+    remoteVideo.playsInline = true;
+    remoteVideo.style.width = '200px';
+    remoteVideo.style.height = '200px';
+    remoteVideo.style.border = '2px solid green';
+    remoteVideo.style.margin = '10px';
+    remoteVideo.id = `remote-${id}`;  // Para poder identificarlo fácilmente
+    remoteVideosContainer.appendChild(remoteVideo);
+
     peerConnection.ontrack = event => {
-        const remoteVideo = document.createElement('video');
-        remoteVideo.id = `video-${id}`; // Identificador único para cada video
         remoteVideo.srcObject = event.streams[0];
-        remoteVideo.autoplay = true;
-        remoteVideo.playsInline = true;
-        remoteVideo.style.width = '300px';
-        remoteVideo.style.height = '300px';
-        remoteVideo.style.border = '2px solid green';
-        remoteVideo.style.margin = '10px';
-        remoteVideosContainer.appendChild(remoteVideo);
     };
 
     peerConnection.onicecandidate = event => {
@@ -95,15 +93,13 @@ async function startCamera() {
 
 cameraButton.addEventListener('click', () => {
     if (localStream) {
-        const videoTrack = localStream.getVideoTracks()[0];
-        videoTrack.enabled = !videoTrack.enabled;
+        localStream.getVideoTracks()[0].enabled = !localStream.getVideoTracks()[0].enabled;
     }
 });
 
 micButton.addEventListener('click', () => {
     if (localStream) {
-        const audioTrack = localStream.getAudioTracks()[0];
-        audioTrack.enabled = !audioTrack.enabled;
+        localStream.getAudioTracks()[0].enabled = !localStream.getAudioTracks()[0].enabled;
     }
 });
 
@@ -135,17 +131,23 @@ screenButton.addEventListener('click', async () => {
     }
 });
 
-startCamera();
+function removePeer(id) {
+    if (peers[id]) {
+        peers[id].close();
+        delete peers[id];
+    }
+    const videoElement = document.getElementById(`remote-${id}`);
+    if (videoElement) {
+        videoElement.remove();
+    }
+}
 
-// Fecha y hora de última actualización
-const fechaActualizacion = document.createElement('div');
-fechaActualizacion.style.position = 'fixed';
-fechaActualizacion.style.bottom = '5px';
-fechaActualizacion.style.right = '5px';
-fechaActualizacion.style.backgroundColor = 'rgba(0,0,0,0.5)';
-fechaActualizacion.style.color = 'white';
-fechaActualizacion.style.padding = '4px 8px';
-fechaActualizacion.style.fontSize = '12px';
-fechaActualizacion.style.borderRadius = '4px';
-fechaActualizacion.innerText = 'Actualizado: ' + new Date().toLocaleString();
-document.body.appendChild(fechaActualizacion);
+// Informar cuando el usuario se va
+window.addEventListener('beforeunload', () => {
+    const userID = localStorage.getItem('userID');
+    if (userID) {
+        socket.send(JSON.stringify({ type: 'user-disconnected', id: userID }));
+    }
+});
+
+startCamera();
