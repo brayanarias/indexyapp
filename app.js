@@ -3,6 +3,7 @@ const remoteVideosContainer = document.getElementById('remoteVideosContainer');
 const cameraButton = document.getElementById('cameraButton');
 const micButton = document.getElementById('micButton');
 const screenButton = document.getElementById('screenButton');
+const lastUpdateLabel = document.getElementById('lastUpdate');
 
 let localStream;
 let peers = {};
@@ -18,7 +19,6 @@ socket.addEventListener('message', async event => {
 
     if (data.type === 'id') {
         console.log('Tu ID es:', data.id);
-        localStorage.setItem('userID', data.id);  // Guardamos nuestro ID
     } else if (data.type === 'offer') {
         const peerConnection = createPeerConnection(data.from);
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
@@ -27,9 +27,7 @@ socket.addEventListener('message', async event => {
 
         socket.send(JSON.stringify({ type: 'answer', answer, to: data.from }));
     } else if (data.type === 'answer') {
-        if (peers[data.from]) {
-            await peers[data.from].setRemoteDescription(new RTCSessionDescription(data.answer));
-        }
+        await peers[data.from].setRemoteDescription(new RTCSessionDescription(data.answer));
     } else if (data.type === 'candidate') {
         if (peers[data.from]) {
             await peers[data.from].addIceCandidate(new RTCIceCandidate(data.candidate));
@@ -39,7 +37,14 @@ socket.addEventListener('message', async event => {
         callUser(data.id);
     } else if (data.type === 'user-disconnected') {
         console.log('Usuario desconectado:', data.id);
-        removePeer(data.id);
+        if (peers[data.id]) {
+            peers[data.id].close();
+            delete peers[data.id];
+        }
+        const video = document.getElementById(`video-${data.id}`);
+        if (video) {
+            video.remove();
+        }
     }
 });
 
@@ -50,18 +55,17 @@ function createPeerConnection(id) {
         peerConnection.addTrack(track, localStream);
     });
 
-    const remoteVideo = document.createElement('video');
-    remoteVideo.autoplay = true;
-    remoteVideo.playsInline = true;
-    remoteVideo.style.width = '200px';
-    remoteVideo.style.height = '200px';
-    remoteVideo.style.border = '2px solid green';
-    remoteVideo.style.margin = '10px';
-    remoteVideo.id = `remote-${id}`;  // Para poder identificarlo fácilmente
-    remoteVideosContainer.appendChild(remoteVideo);
-
     peerConnection.ontrack = event => {
+        const remoteVideo = document.createElement('video');
+        remoteVideo.id = `video-${id}`;
         remoteVideo.srcObject = event.streams[0];
+        remoteVideo.autoplay = true;
+        remoteVideo.playsInline = true;
+        remoteVideo.style.width = '300px';
+        remoteVideo.style.height = '300px';
+        remoteVideo.style.border = '2px solid green';
+        remoteVideo.style.margin = '10px';
+        remoteVideosContainer.appendChild(remoteVideo);
     };
 
     peerConnection.onicecandidate = event => {
@@ -91,15 +95,21 @@ async function startCamera() {
     }
 }
 
+// Botones con cambios visuales
+
 cameraButton.addEventListener('click', () => {
     if (localStream) {
-        localStream.getVideoTracks()[0].enabled = !localStream.getVideoTracks()[0].enabled;
+        const videoTrack = localStream.getVideoTracks()[0];
+        videoTrack.enabled = !videoTrack.enabled;
+        cameraButton.style.backgroundColor = videoTrack.enabled ? 'green' : 'red';
     }
 });
 
 micButton.addEventListener('click', () => {
     if (localStream) {
-        localStream.getAudioTracks()[0].enabled = !localStream.getAudioTracks()[0].enabled;
+        const audioTrack = localStream.getAudioTracks()[0];
+        audioTrack.enabled = !audioTrack.enabled;
+        micButton.style.backgroundColor = audioTrack.enabled ? 'green' : 'red';
     }
 });
 
@@ -108,46 +118,39 @@ screenButton.addEventListener('click', async () => {
         const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
         const screenTrack = screenStream.getVideoTracks()[0];
 
+        // Reemplazar video para otros peers
         for (let id in peers) {
             const sender = peers[id].getSenders().find(s => s.track.kind === 'video');
-            if (sender) {
-                sender.replaceTrack(screenTrack);
-            }
+            sender.replaceTrack(screenTrack);
         }
 
+        // Mostrar también la pantalla compartida localmente
+        localVideo.srcObject = screenStream;
+        screenButton.style.backgroundColor = 'green';
+
+        // Cuando termina el compartir pantalla
         screenTrack.onended = async () => {
-            const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             const cameraTrack = cameraStream.getVideoTracks()[0];
 
             for (let id in peers) {
                 const sender = peers[id].getSenders().find(s => s.track.kind === 'video');
-                if (sender) {
-                    sender.replaceTrack(cameraTrack);
-                }
+                sender.replaceTrack(cameraTrack);
             }
+
+            localStream = cameraStream;
+            localVideo.srcObject = localStream;
+            screenButton.style.backgroundColor = 'white';
         };
     } catch (error) {
         console.error('Error compartiendo pantalla:', error);
     }
 });
 
-function removePeer(id) {
-    if (peers[id]) {
-        peers[id].close();
-        delete peers[id];
-    }
-    const videoElement = document.getElementById(`remote-${id}`);
-    if (videoElement) {
-        videoElement.remove();
-    }
+// Mostrar la fecha y hora de última actualización
+if (lastUpdateLabel) {
+    const now = new Date();
+    lastUpdateLabel.innerText = `Última actualización: ${now.toLocaleString()}`;
 }
-
-// Informar cuando el usuario se va
-window.addEventListener('beforeunload', () => {
-    const userID = localStorage.getItem('userID');
-    if (userID) {
-        socket.send(JSON.stringify({ type: 'user-disconnected', id: userID }));
-    }
-});
 
 startCamera();
