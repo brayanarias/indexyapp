@@ -56,7 +56,12 @@ function createPeerConnection(id) {
             remoteVideo.style.height = '300px';
             remoteVideo.style.border = '2px solid green';
             remoteVideo.style.margin = '10px';
+            remoteVideo.style.display = 'none'; // Inicialmente oculto
             remoteVideosContainer.appendChild(remoteVideo);
+
+            remoteVideo.onloadedmetadata = () => {
+                remoteVideo.style.display = 'block'; // Solo mostrar cuando ya tiene datos
+            };
         }
 
         remoteVideo.srcObject = event.streams[0];
@@ -71,6 +76,7 @@ function createPeerConnection(id) {
     peers[id] = peerConnection;
     return peerConnection;
 }
+
 
 async function callUser(id) {
     const peerConnection = createPeerConnection(id);
