@@ -2,34 +2,23 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Consciencia Superior - Reunión Virtual</title>
+    <title>Comunicación Simple</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f0f0f0; }
+        video { width: 400px; height: 300px; background: black; margin: 10px; }
+        button { margin: 5px; padding: 10px; font-size: 16px; }
+    </style>
 </head>
-<body style="font-family: Arial, sans-serif; text-align: center; background-color: #f0f0f0;">
-
-    <h1>Bienvenido a Consciencia Superior</h1>
-
-    <div style="margin-bottom: 20px;">
-        <button id="cameraButton">Cámara ON/OFF</button>
-        <button id="micButton">Micrófono ON/OFF</button>
-        <button id="screenButton">Compartir Pantalla</button>
-    </div>
-
-    <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
-
-        <div style="flex: 0 1 300px;">
-            <video id="localVideo" autoplay muted playsinline style="width: 100%; border: 2px solid blue; border-radius: 8px;"></video>
-            <p>Tu cámara</p>
-        </div>
-
-        <div id="remoteVideosContainer" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
-
-            <!-- Aquí se agregarán dinámicamente los videos de otros usuarios -->
-
-        </div>
+<body>
+    <h1>Comunicación Simple</h1>
+    <video id="localVideo" autoplay muted></video>
+    <div>
+	<button id="toggleCamera">Prender/Apagar Cámara</button>
+	<button id="toggleMicrophone">Prender/Apagar Micrófono</button>
+	<button id="shareScreen">Compartir Pantalla</button>
 
     </div>
 
     <script src="app.js"></script>
-
 </body>
 </html>
