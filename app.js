@@ -50,18 +50,47 @@ function createPeerConnection(id) {
         peerConnection.addTrack(track, localStream);
     });
 
-    const remoteVideo = document.createElement('video');
-    remoteVideo.autoplay = true;
-    remoteVideo.playsInline = true;
-    remoteVideo.style.width = '200px';
-    remoteVideo.style.height = '200px';
-    remoteVideo.style.border = '2px solid green';
-    remoteVideo.style.margin = '10px';
-    remoteVideo.id = `remote-${id}`;  // Para poder identificarlo fácilmente
-    remoteVideosContainer.appendChild(remoteVideo);
-
     peerConnection.ontrack = event => {
+        const remoteVideoWrapper = document.createElement('div');
+        remoteVideoWrapper.style.position = 'relative';
+        remoteVideoWrapper.style.display = 'inline-block';
+        remoteVideoWrapper.style.margin = '10px';
+
+        const remoteVideo = document.createElement('video');
         remoteVideo.srcObject = event.streams[0];
+        remoteVideo.autoplay = true;
+        remoteVideo.playsInline = true;
+        remoteVideo.style.width = '300px';
+        remoteVideo.style.height = '300px';
+        remoteVideo.style.border = '2px solid green';
+        remoteVideo.style.borderRadius = '10px';
+        remoteVideoWrapper.appendChild(remoteVideo);
+
+        const fullscreenButton = document.createElement('button');
+        fullscreenButton.innerText = '🔍';
+        fullscreenButton.style.position = 'absolute';
+        fullscreenButton.style.top = '5px';
+        fullscreenButton.style.right = '5px';
+        fullscreenButton.style.background = 'rgba(0, 0, 0, 0.5)';
+        fullscreenButton.style.color = 'white';
+        fullscreenButton.style.border = 'none';
+        fullscreenButton.style.borderRadius = '50%';
+        fullscreenButton.style.width = '30px';
+        fullscreenButton.style.height = '30px';
+        fullscreenButton.style.cursor = 'pointer';
+
+        fullscreenButton.onclick = () => {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                remoteVideo.requestFullscreen().catch(err => {
+                    console.error('Error al intentar pantalla completa:', err);
+                });
+            }
+        };
+
+        remoteVideoWrapper.appendChild(fullscreenButton);
+        remoteVideosContainer.appendChild(remoteVideoWrapper);
     };
 
     peerConnection.onicecandidate = event => {
@@ -73,6 +102,7 @@ function createPeerConnection(id) {
     peers[id] = peerConnection;
     return peerConnection;
 }
+
 
 async function callUser(id) {
     const peerConnection = createPeerConnection(id);
@@ -108,12 +138,32 @@ screenButton.addEventListener('click', async () => {
         const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
         const screenTrack = screenStream.getVideoTracks()[0];
 
+        // Cambiar en conexiones
         for (let id in peers) {
             const sender = peers[id].getSenders().find(s => s.track.kind === 'video');
             if (sender) {
                 sender.replaceTrack(screenTrack);
             }
         }
+
+        // Mostrar vista propia de la pantalla compartida
+        const localScreenWrapper = document.createElement('div');
+        localScreenWrapper.style.position = 'relative';
+        localScreenWrapper.style.display = 'inline-block';
+        localScreenWrapper.style.margin = '10px';
+
+        const localScreenVideo = document.createElement('video');
+        localScreenVideo.srcObject = screenStream;
+        localScreenVideo.autoplay = true;
+        localScreenVideo.playsInline = true;
+        localScreenVideo.muted = true; // No queremos eco
+        localScreenVideo.style.width = '300px';
+        localScreenVideo.style.height = '300px';
+        localScreenVideo.style.border = '2px dashed blue';
+        localScreenVideo.style.borderRadius = '10px';
+
+        localScreenWrapper.appendChild(localScreenVideo);
+        remoteVideosContainer.appendChild(localScreenWrapper);
 
         screenTrack.onended = async () => {
             const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -125,11 +175,15 @@ screenButton.addEventListener('click', async () => {
                     sender.replaceTrack(cameraTrack);
                 }
             }
+
+            // Eliminar la miniatura cuando deje de compartir pantalla
+            remoteVideosContainer.removeChild(localScreenWrapper);
         };
     } catch (error) {
         console.error('Error compartiendo pantalla:', error);
     }
 });
+
 
 function removePeer(id) {
     if (peers[id]) {
