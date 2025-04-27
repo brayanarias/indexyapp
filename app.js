@@ -1,151 +1,121 @@
-const socket = new WebSocket('wss://servidor-senalizacion-production.up.railway.app');
+const localVideo = document.getElementById('localVideo');
+const remoteVideosContainer = document.getElementById('remoteVideosContainer');
+const cameraButton = document.getElementById('cameraButton');
+const micButton = document.getElementById('micButton');
+const screenButton = document.getElementById('screenButton');
+
 let localStream;
-let peers = {}; // Para manejar múltiples conexiones
+let peers = {};
+let socket = new WebSocket('wss://servidor-senalizacion-production.up.railway.app');
 
-// Elementos de la interfaz
-const localVideo = document.createElement('video');
-localVideo.autoplay = true;
-localVideo.muted = true;
-document.body.insertBefore(localVideo, document.body.firstChild);
-
-const remoteContainer = document.createElement('div');
-document.body.appendChild(remoteContainer);
-
-// Botones
-const toggleCameraButton = document.getElementById('toggleCamera');
-const toggleMicButton = document.getElementById('toggleMic');
-const shareScreenButton = document.getElementById('shareScreen');
-
-// Variables de control
-let cameraOn = true;
-let micOn = true;
-
-// Al conectarse al servidor
 socket.addEventListener('open', () => {
     console.log('Conectado al servidor de señalización');
 });
 
-// Recibir mensajes del servidor
-socket.addEventListener('message', async (event) => {
-    const message = JSON.parse(event.data);
-    const { type, from, offer, answer, candidate, users } = message;
+socket.addEventListener('message', async event => {
+    const data = JSON.parse(event.data);
 
-    if (type === 'welcome') {
-        console.log('Tu ID es:', message.id);
-    }
+    if (data.type === 'id') {
+        console.log('Tu ID es:', data.id);
+    } else if (data.type === 'offer') {
+        const peerConnection = createPeerConnection(data.from);
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
 
-    if (type === 'users') {
-        for (const userId of users) {
-            if (!peers[userId]) {
-                await callUser(userId);
-            }
+        socket.send(JSON.stringify({ type: 'answer', answer, to: data.from }));
+    } else if (data.type === 'answer') {
+        await peers[data.from].setRemoteDescription(new RTCSessionDescription(data.answer));
+    } else if (data.type === 'candidate') {
+        if (peers[data.from]) {
+            await peers[data.from].addIceCandidate(new RTCIceCandidate(data.candidate));
         }
-    }
-
-    if (type === 'offer') {
-        await handleOffer(from, offer);
-    }
-
-    if (type === 'answer') {
-        await peers[from].setRemoteDescription(new RTCSessionDescription(answer));
-    }
-
-    if (type === 'candidate') {
-        if (peers[from]) {
-            await peers[from].addIceCandidate(new RTCIceCandidate(candidate));
-        }
+    } else if (data.type === 'new-user') {
+        console.log('Nuevo usuario conectado:', data.id);
+        callUser(data.id);
     }
 });
 
-// Obtener cámara y micrófono
-async function startMedia() {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    localVideo.srcObject = localStream;
-}
-
-startMedia();
-
-// Crear una conexión
-async function createPeerConnection(userId) {
+function createPeerConnection(id) {
     const peerConnection = new RTCPeerConnection();
-    
+
     localStream.getTracks().forEach(track => {
         peerConnection.addTrack(track, localStream);
     });
 
-    peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-            socket.send(JSON.stringify({ type: 'candidate', to: userId, candidate: event.candidate }));
-        }
-    };
-
-    peerConnection.ontrack = (event) => {
-        let remoteVideo = document.getElementById(`remote-${userId}`);
-        if (!remoteVideo) {
-            remoteVideo = document.createElement('video');
-            remoteVideo.id = `remote-${userId}`;
-            remoteVideo.autoplay = true;
-            remoteVideo.playsInline = true;
-            remoteContainer.appendChild(remoteVideo);
-        }
+    peerConnection.ontrack = event => {
+        const remoteVideo = document.createElement('video');
         remoteVideo.srcObject = event.streams[0];
+        remoteVideo.autoplay = true;
+        remoteVideo.playsInline = true;
+        remoteVideo.style.width = '300px';
+        remoteVideo.style.height = '300px';
+        remoteVideo.style.border = '2px solid green';
+        remoteVideo.style.margin = '10px';
+        remoteVideosContainer.appendChild(remoteVideo);
     };
 
+    peerConnection.onicecandidate = event => {
+        if (event.candidate) {
+            socket.send(JSON.stringify({ type: 'candidate', candidate: event.candidate, to: id }));
+        }
+    };
+
+    peers[id] = peerConnection;
     return peerConnection;
 }
 
-// Llamar a un usuario
-async function callUser(userId) {
-    const peerConnection = await createPeerConnection(userId);
-    peers[userId] = peerConnection;
-
+async function callUser(id) {
+    const peerConnection = createPeerConnection(id);
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
 
-    socket.send(JSON.stringify({ type: 'offer', to: userId, offer }));
+    socket.send(JSON.stringify({ type: 'offer', offer, to: id }));
 }
 
-// Manejar ofertas
-async function handleOffer(userId, offer) {
-    const peerConnection = await createPeerConnection(userId);
-    peers[userId] = peerConnection;
-
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-
-    socket.send(JSON.stringify({ type: 'answer', to: userId, answer }));
+async function startCamera() {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localVideo.srcObject = localStream;
+    } catch (error) {
+        console.error('Error accediendo a la cámara/micrófono:', error);
+    }
 }
 
-// Botones para controlar cámara, micrófono y compartir pantalla
-toggleCameraButton.addEventListener('click', () => {
-    cameraOn = !cameraOn;
-    localStream.getVideoTracks()[0].enabled = cameraOn;
+cameraButton.addEventListener('click', () => {
+    if (localStream) {
+        localStream.getVideoTracks()[0].enabled = !localStream.getVideoTracks()[0].enabled;
+    }
 });
 
-toggleMicButton.addEventListener('click', () => {
-    micOn = !micOn;
-    localStream.getAudioTracks()[0].enabled = micOn;
+micButton.addEventListener('click', () => {
+    if (localStream) {
+        localStream.getAudioTracks()[0].enabled = !localStream.getAudioTracks()[0].enabled;
+    }
 });
 
-shareScreenButton.addEventListener('click', async () => {
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    const screenTrack = screenStream.getVideoTracks()[0];
-    
-    for (const userId in peers) {
-        const sender = peers[userId].getSenders().find(s => s.track.kind === 'video');
-        if (sender) {
+screenButton.addEventListener('click', async () => {
+    try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const screenTrack = screenStream.getVideoTracks()[0];
+
+        for (let id in peers) {
+            const sender = peers[id].getSenders().find(s => s.track.kind === 'video');
             sender.replaceTrack(screenTrack);
         }
-    }
 
-    screenTrack.onended = async () => {
-        const videoTrack = localStream.getVideoTracks()[0];
-        for (const userId in peers) {
-            const sender = peers[userId].getSenders().find(s => s.track.kind === 'video');
-            if (sender) {
-                sender.replaceTrack(videoTrack);
+        screenTrack.onended = async () => {
+            const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const cameraTrack = cameraStream.getVideoTracks()[0];
+
+            for (let id in peers) {
+                const sender = peers[id].getSenders().find(s => s.track.kind === 'video');
+                sender.replaceTrack(cameraTrack);
             }
-        }
-    };
+        };
+    } catch (error) {
+        console.error('Error compartiendo pantalla:', error);
+    }
 });
+
+startCamera();
