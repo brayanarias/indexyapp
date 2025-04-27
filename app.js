@@ -60,11 +60,32 @@ function createPeerConnection(id) {
             remoteVideosContainer.appendChild(remoteVideo);
 
             remoteVideo.onloadedmetadata = () => {
-                remoteVideo.style.display = 'block'; // Solo mostrar cuando ya tiene datos
+                remoteVideo.style.display = 'block'; // Mostrar solo cuando tiene datos
             };
         }
 
         remoteVideo.srcObject = event.streams[0];
+
+        // Agregar la fecha y hora de actualización
+        let timestamp = document.getElementById(`timestamp-${id}`);
+        if (!timestamp) {
+            timestamp = document.createElement('div');
+            timestamp.id = `timestamp-${id}`;
+            timestamp.style.position = 'absolute';
+            timestamp.style.fontSize = '10px';
+            timestamp.style.color = 'white';
+            timestamp.style.backgroundColor = 'rgba(0,0,0,0.5)';
+            timestamp.style.padding = '2px 4px';
+            timestamp.style.bottom = '5px';
+            timestamp.style.right = '5px';
+            timestamp.style.zIndex = '10';
+
+            remoteVideo.parentElement.style.position = 'relative'; // Asegurar que el contenedor sea relativo
+            remoteVideo.parentElement.appendChild(timestamp);
+        }
+
+        const now = new Date();
+        timestamp.textContent = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
     };
 
     peerConnection.onicecandidate = event => {
@@ -129,6 +150,11 @@ screenButton.addEventListener('click', async () => {
     } catch (error) {
         console.error('Error compartiendo pantalla:', error);
     }
+});
+
+// Avisar al servidor cuando un usuario se desconecta
+window.addEventListener('beforeunload', () => {
+    socket.send(JSON.stringify({ type: 'disconnect' }));
 });
 
 startCamera();
