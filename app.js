@@ -151,3 +151,17 @@ window.addEventListener('beforeunload', () => {
 });
 
 startCamera();
+
+// Permitir ampliar cualquier video remoto a pantalla completa con doble clic
+remoteVideosContainer.addEventListener('dblclick', event => {
+    if (event.target.tagName === 'VIDEO') {
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else {
+            event.target.requestFullscreen().catch(err => {
+                console.error('Error al intentar pantalla completa:', err);
+            });
+        }
+    }
+});
+
