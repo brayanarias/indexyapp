@@ -6,38 +6,34 @@ const screenButton = document.getElementById('screenButton');
 
 let localStream;
 let peers = {};
-let miId = null;
 let socket = new WebSocket('wss://servidor-senalizacion-production.up.railway.app');
 
 socket.addEventListener('open', () => {
     console.log('Conectado al servidor de señalización');
-    socket.send(JSON.stringify({ type: 'new-user' })); // AVISA QUE ERES UN NUEVO USUARIO
+    socket.send(JSON.stringify({ type: 'nuevo-usuario' }));
 });
 
 socket.addEventListener('message', async event => {
     const data = JSON.parse(event.data);
 
     if (data.type === 'id') {
-        miId = data.id;
-        console.log('Tu ID es:', miId);
-    } else if (data.type === 'new-user') {
-        console.log('Nuevo usuario conectado:', data.id);
-        callUser(data.id); // AUTOMÁTICAMENTE LLAMAS AL NUEVO
+        console.log('Tu ID es:', data.id);
     } else if (data.type === 'offer') {
         const peerConnection = createPeerConnection(data.from);
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
 
-        socket.send(JSON.stringify({ type: 'answer', answer: answer, to: data.from }));
+        socket.send(JSON.stringify({ type: 'answer', answer, to: data.from }));
     } else if (data.type === 'answer') {
-        if (peers[data.from]) {
-            await peers[data.from].setRemoteDescription(new RTCSessionDescription(data.answer));
-        }
+        await peers[data.from].setRemoteDescription(new RTCSessionDescription(data.answer));
     } else if (data.type === 'candidate') {
         if (peers[data.from]) {
             await peers[data.from].addIceCandidate(new RTCIceCandidate(data.candidate));
         }
+    } else if (data.type === 'new-user') {
+        console.log('Nuevo usuario conectado:', data.id);
+        callUser(data.id);
     }
 });
 
@@ -49,15 +45,21 @@ function createPeerConnection(id) {
     });
 
     peerConnection.ontrack = event => {
-        const remoteVideo = document.createElement('video');
+        let remoteVideo = document.getElementById(`remoteVideo-${id}`);
+
+        if (!remoteVideo) {
+            remoteVideo = document.createElement('video');
+            remoteVideo.id = `remoteVideo-${id}`;
+            remoteVideo.autoplay = true;
+            remoteVideo.playsInline = true;
+            remoteVideo.style.width = '300px';
+            remoteVideo.style.height = '300px';
+            remoteVideo.style.border = '2px solid green';
+            remoteVideo.style.margin = '10px';
+            remoteVideosContainer.appendChild(remoteVideo);
+        }
+
         remoteVideo.srcObject = event.streams[0];
-        remoteVideo.autoplay = true;
-        remoteVideo.playsInline = true;
-        remoteVideo.style.width = '300px';
-        remoteVideo.style.height = '300px';
-        remoteVideo.style.border = '2px solid green';
-        remoteVideo.style.margin = '10px';
-        remoteVideosContainer.appendChild(remoteVideo);
     };
 
     peerConnection.onicecandidate = event => {
@@ -75,7 +77,7 @@ async function callUser(id) {
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
 
-    socket.send(JSON.stringify({ type: 'offer', offer: offer, to: id }));
+    socket.send(JSON.stringify({ type: 'offer', offer, to: id }));
 }
 
 async function startCamera() {
@@ -106,9 +108,7 @@ screenButton.addEventListener('click', async () => {
 
         for (let id in peers) {
             const sender = peers[id].getSenders().find(s => s.track.kind === 'video');
-            if (sender) {
-                sender.replaceTrack(screenTrack);
-            }
+            sender.replaceTrack(screenTrack);
         }
 
         screenTrack.onended = async () => {
@@ -117,9 +117,7 @@ screenButton.addEventListener('click', async () => {
 
             for (let id in peers) {
                 const sender = peers[id].getSenders().find(s => s.track.kind === 'video');
-                if (sender) {
-                    sender.replaceTrack(cameraTrack);
-                }
+                sender.replaceTrack(cameraTrack);
             }
         };
     } catch (error) {
