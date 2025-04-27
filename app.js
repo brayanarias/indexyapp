@@ -1,137 +1,148 @@
-const socket = new WebSocket('wss://servidor-senalizacion-production.up.railway.app');
+const localVideo = document.getElementById('localVideo');
+const remoteVideosContainer = document.getElementById('remoteVideosContainer');
+const cameraButton = document.getElementById('cameraButton');
+const micButton = document.getElementById('micButton');
+const screenButton = document.getElementById('screenButton');
 
 let localStream;
-let remoteStream;
-let peerConnection;
-const config = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' }
-  ]
-};
+let peers = {};
+let socket = new WebSocket('wss://servidor-senalizacion-production.up.railway.app');
 
-socket.onopen = () => {
-  console.log('Conectado al servidor de señalización');
-};
+socket.addEventListener('open', () => {
+    console.log('Conectado al servidor de señalización');
+});
 
-socket.onmessage = (message) => {
-  const data = JSON.parse(message.data);
+socket.addEventListener('message', async (event) => {
+    const data = JSON.parse(event.data);
 
-  if (data.type === 'your-id') {
-    console.log('Tu ID es:', data.id);
-    window.myID = data.id; // Guardamos nuestro propio ID
-  } else if (data.type === 'offer') {
-    handleOffer(data.offer, data.from);
-  } else if (data.type === 'answer') {
-    handleAnswer(data.answer);
-  } else if (data.type === 'candidate') {
-    if (peerConnection) {
-      peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+    if (data.type === 'id') {
+        console.log('Mi ID asignado:', data.id);
+    } else if (data.type === 'new-user') {
+        console.log('Nuevo usuario conectado:', data.id);
+        callUser(data.id);
+    } else if (data.type === 'offer') {
+        const peerConnection = createPeerConnection(data.from);
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        socket.send(JSON.stringify({ type: 'answer', answer: answer, to: data.from }));
+    } else if (data.type === 'answer') {
+        await peers[data.from].setRemoteDescription(new RTCSessionDescription(data.answer));
+    } else if (data.type === 'candidate') {
+        if (peers[data.from]) {
+            await peers[data.from].addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
     }
-  }
-};
+});
+
+function createPeerConnection(id) {
+    const peerConnection = new RTCPeerConnection();
+
+    localStream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, localStream);
+    });
+
+    peerConnection.ontrack = (event) => {
+        let remoteVideo = document.querySelector(`video[data-peer-id="${id}"]`);
+        if (!remoteVideo) {
+            remoteVideo = document.createElement('video');
+            remoteVideo.dataset.peerId = id;
+            remoteVideo.autoplay = true;
+            remoteVideo.playsInline = true;
+            remoteVideo.style.width = '300px';
+            remoteVideo.style.height = '300px';
+            remoteVideo.style.border = '2px solid green';
+            remoteVideo.style.margin = '10px';
+            remoteVideosContainer.appendChild(remoteVideo);
+        }
+        remoteVideo.srcObject = event.streams[0];
+    };
+
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+            socket.send(JSON.stringify({ type: 'candidate', candidate: event.candidate, to: id }));
+        }
+    };
+
+    peers[id] = peerConnection;
+    return peerConnection;
+}
+
+async function callUser(id) {
+    const peerConnection = createPeerConnection(id);
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+
+    socket.send(JSON.stringify({ type: 'offer', offer: offer, to: id }));
+}
 
 async function startCamera() {
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    document.querySelector('video').srcObject = localStream;
-  } catch (error) {
-    console.error('Error accediendo a la cámara/micrófono:', error);
-  }
-}
-
-function createPeerConnection(otherUserId) {
-  peerConnection = new RTCPeerConnection(config);
-
-  peerConnection.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.send(JSON.stringify({
-        type: 'candidate',
-        candidate: event.candidate,
-        to: otherUserId
-      }));
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localVideo.srcObject = localStream;
+    } catch (error) {
+        console.error('Error accediendo a la cámara/micrófono:', error);
     }
-  };
+}
 
-  peerConnection.ontrack = (event) => {
-    if (!remoteStream) {
-      remoteStream = new MediaStream();
-      const remoteVideo = document.createElement('video');
-      remoteVideo.autoplay = true;
-      remoteVideo.playsInline = true;
-      remoteVideo.srcObject = remoteStream;
-      document.body.appendChild(remoteVideo);
+cameraButton.addEventListener('click', () => {
+    if (localStream) {
+        const videoTrack = localStream.getVideoTracks()[0];
+        videoTrack.enabled = !videoTrack.enabled;
+        cameraButton.style.backgroundColor = videoTrack.enabled ? 'green' : 'red';
     }
-    remoteStream.addTrack(event.track);
-  };
-
-  localStream.getTracks().forEach((track) => {
-    peerConnection.addTrack(track, localStream);
-  });
-}
-
-async function callUser(otherUserId) {
-  createPeerConnection(otherUserId);
-
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
-
-  socket.send(JSON.stringify({
-    type: 'offer',
-    offer: offer,
-    to: otherUserId
-  }));
-}
-
-async function handleOffer(offer, from) {
-  createPeerConnection(from);
-
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer = await peerConnection.createAnswer();
-  await peerConnection.setLocalDescription(answer);
-
-  socket.send(JSON.stringify({
-    type: 'answer',
-    answer: answer,
-    to: from
-  }));
-}
-
-async function handleAnswer(answer) {
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-}
-
-// Botones de interfaz
-document.getElementById('toggleCamera').addEventListener('click', async () => {
-  if (!localStream) {
-    await startCamera();
-  } else {
-    const videoTrack = localStream.getVideoTracks()[0];
-    videoTrack.enabled = !videoTrack.enabled;
-  }
 });
 
-document.getElementById('toggleMicrophone').addEventListener('click', async () => {
-  if (!localStream) {
-    await startCamera();
-  } else {
-    const audioTrack = localStream.getAudioTracks()[0];
-    audioTrack.enabled = !audioTrack.enabled;
-  }
+micButton.addEventListener('click', () => {
+    if (localStream) {
+        const audioTrack = localStream.getAudioTracks()[0];
+        audioTrack.enabled = !audioTrack.enabled;
+        micButton.style.backgroundColor = audioTrack.enabled ? 'green' : 'red';
+    }
 });
 
-document.getElementById('shareScreen').addEventListener('click', async () => {
-  try {
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    const screenTrack = screenStream.getVideoTracks()[0];
+screenButton.addEventListener('click', async () => {
+    try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const screenTrack = screenStream.getVideoTracks()[0];
 
-    const sender = peerConnection.getSenders().find(s => s.track.kind === 'video');
-    sender.replaceTrack(screenTrack);
+        for (let id in peers) {
+            const sender = peers[id].getSenders().find(s => s.track.kind === 'video');
+            if (sender) {
+                sender.replaceTrack(screenTrack);
+            }
+        }
 
-    screenTrack.onended = async () => {
-      const videoTrack = localStream.getVideoTracks()[0];
-      sender.replaceTrack(videoTrack);
-    };
-  } catch (error) {
-    console.error('Error compartiendo pantalla:', error);
-  }
+        // Mostrar también la pantalla compartida en local
+        localVideo.srcObject = screenStream;
+
+        screenTrack.onended = async () => {
+            const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const cameraTrack = cameraStream.getVideoTracks()[0];
+
+            for (let id in peers) {
+                const sender = peers[id].getSenders().find(s => s.track.kind === 'video');
+                if (sender) {
+                    sender.replaceTrack(cameraTrack);
+                }
+            }
+            localVideo.srcObject = cameraStream;
+            localStream = cameraStream;
+        };
+    } catch (error) {
+        console.error('Error compartiendo pantalla:', error);
+    }
 });
+
+startCamera();
+
+// Mostrar fecha y hora de última actualización
+const updateInfo = document.createElement('div');
+updateInfo.textContent = `Última actualización: ${new Date().toLocaleString()}`;
+updateInfo.style.position = 'fixed';
+updateInfo.style.bottom = '5px';
+updateInfo.style.right = '10px';
+updateInfo.style.fontSize = '12px';
+updateInfo.style.color = 'gray';
+document.body.appendChild(updateInfo);
