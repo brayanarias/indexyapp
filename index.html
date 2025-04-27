@@ -2,79 +2,64 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Comunicación en Espacios Conscientes</title>
+    <title>Espacios Conscientes: Comunicación en Vivo</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            background: #f5f5f5;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            background-color: #f5f5f5;
+            text-align: center;
+            padding: 20px;
         }
         h1 {
-            margin-top: 20px;
-            color: #333;
+            margin-bottom: 30px;
         }
         #localVideo {
-            margin-top: 20px;
-            border: 3px solid #4CAF50;
-            border-radius: 10px;
-            width: 320px;
-            height: 240px;
-            background: black;
-            object-fit: cover;
+            width: 300px;
+            height: 300px;
+            border: 2px solid blue;
+            margin-bottom: 20px;
+            background-color: black;
         }
-        #remoteContainer {
-            margin-top: 30px;
+        #remoteVideosContainer {
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
-            gap: 20px;
+            gap: 10px;
         }
         video {
-            width: 200px;
-            height: 150px;
-            border: 2px solid #2196F3;
-            border-radius: 8px;
-            background: black;
-            object-fit: cover;
+            background-color: black;
         }
         .controls {
             margin-top: 20px;
-            display: flex;
-            gap: 10px;
         }
         button {
-            padding: 10px 15px;
-            background: #4CAF50;
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
             color: white;
             border: none;
-            border-radius: 5px;
             cursor: pointer;
-            font-weight: bold;
+            border-radius: 5px;
         }
         button:hover {
-            background: #45a049;
+            background-color: #45a049;
         }
     </style>
 </head>
 <body>
-
     <h1>Espacios Conscientes: Comunicación en Vivo</h1>
 
     <video id="localVideo" autoplay muted playsinline></video>
 
-    <div class="controls">
-        <button id="toggleCamera">Prender/Apagar Cámara</button>
-        <button id="toggleMic">Prender/Apagar Micrófono</button>
-        <button id="shareScreen">Compartir Pantalla</button>
-    </div>
-
     <div id="remoteVideosContainer"></div>
 
-    <script src="app.js"></script>
+    <div class="controls">
+        <button id="cameraButton">Prender/Apagar Cámara</button>
+        <button id="micButton">Prender/Apagar Micrófono</button>
+        <button id="screenButton">Compartir Pantalla</button>
+    </div>
 
+    <script src="app.js"></script>
 </body>
 </html>
