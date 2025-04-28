@@ -46,6 +46,16 @@
     </style>
 </head>
 <body>
+    <!-- Añade esto en el <body> -->
+    <div class="controls">
+      <button id="toggle-video">Apagar Cámara</button>
+      <button id="toggle-mic">Silenciar Micrófono</button>
+      <button id="share-screen">Compartir Pantalla</button>
+    </div>
+    <div id="video-container">
+      <video id="local-video" autoplay muted></video>
+      <!-- Videos remotos se añaden aquí -->
+    </div>
     <div id="controls">
         <button id="cameraButton" style="background-color: green;">Cámara</button>
         <button id="micButton" style="background-color: green;">Micrófono</button>
