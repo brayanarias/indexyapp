@@ -1,67 +1,54 @@
-const localVideo = document.getElementById('localVideo');
-const remoteVideosContainer = document.getElementById('remoteVideosContainer');
-const cameraButton = document.getElementById('cameraButton');
-const micButton = document.getElementById('micButton');
-const screenButton = document.getElementById('screenButton');
+const socket = io();
 
 let localStream;
 let peers = {};
-let socket = new WebSocket('wss://servidor-senalizacion-production.up.railway.app');
 
-socket.addEventListener('open', () => {
-    console.log('Conectado al servidor de señalización');
-});
+const localVideo = document.getElementById('localVideo');
+const videos = document.getElementById('videos');
+const cameraButton = document.getElementById('cameraButton');
+const micButton = document.getElementById('micButton');
+const screenButton = document.getElementById('screenButton');
+const snapshotButton = document.getElementById('snapshotButton');
 
-socket.addEventListener('message', async (event) => {
-    const data = JSON.parse(event.data);
+async function startCamera() {
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        const audioDevices = devices.filter(device => device.kind === 'audioinput');
 
-    if (data.type === 'id') {
-        console.log('Mi ID asignado:', data.id);
-    } else if (data.type === 'new-user') {
-        console.log('Nuevo usuario conectado:', data.id);
-        callUser(data.id);
-    } else if (data.type === 'offer') {
-        const peerConnection = createPeerConnection(data.from);
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
+        const constraints = {
+            video: { deviceId: videoDevices[0]?.deviceId || undefined },
+            audio: { deviceId: audioDevices[0]?.deviceId || undefined }
+        };
 
-        socket.send(JSON.stringify({ type: 'answer', answer: answer, to: data.from }));
-    } else if (data.type === 'answer') {
-        await peers[data.from].setRemoteDescription(new RTCSessionDescription(data.answer));
-    } else if (data.type === 'candidate') {
-        if (peers[data.from]) {
-            await peers[data.from].addIceCandidate(new RTCIceCandidate(data.candidate));
-        }
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        localVideo.srcObject = localStream;
+    } catch (error) {
+        console.error('Error accediendo a la cámara/micrófono:', error);
     }
-});
+}
 
 function createPeerConnection(id) {
     const peerConnection = new RTCPeerConnection();
 
-    localStream.getTracks().forEach(track => {
-        peerConnection.addTrack(track, localStream);
-    });
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-    peerConnection.ontrack = (event) => {
-        let remoteVideo = document.querySelector(`video[data-peer-id="${id}"]`);
+    peerConnection.ontrack = event => {
+        let remoteVideo = document.getElementById('remote_' + id);
         if (!remoteVideo) {
             remoteVideo = document.createElement('video');
-            remoteVideo.dataset.peerId = id;
+            remoteVideo.id = 'remote_' + id;
             remoteVideo.autoplay = true;
             remoteVideo.playsInline = true;
-            remoteVideo.style.width = '300px';
-            remoteVideo.style.height = '300px';
-            remoteVideo.style.border = '2px solid green';
-            remoteVideo.style.margin = '10px';
-            remoteVideosContainer.appendChild(remoteVideo);
+            remoteVideo.className = 'remoteVideo';
+            videos.appendChild(remoteVideo);
         }
         remoteVideo.srcObject = event.streams[0];
     };
 
-    peerConnection.onicecandidate = (event) => {
+    peerConnection.onicecandidate = event => {
         if (event.candidate) {
-            socket.send(JSON.stringify({ type: 'candidate', candidate: event.candidate, to: id }));
+            socket.emit('candidate', { to: id, candidate: event.candidate });
         }
     };
 
@@ -73,33 +60,19 @@ async function callUser(id) {
     const peerConnection = createPeerConnection(id);
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
-
-    socket.send(JSON.stringify({ type: 'offer', offer: offer, to: id }));
-}
-
-async function startCamera() {
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        localVideo.srcObject = localStream;
-    } catch (error) {
-        console.error('Error accediendo a la cámara/micrófono:', error);
-    }
+    socket.emit('offer', { to: id, offer: peerConnection.localDescription });
 }
 
 cameraButton.addEventListener('click', () => {
-    if (localStream) {
-        const videoTrack = localStream.getVideoTracks()[0];
-        videoTrack.enabled = !videoTrack.enabled;
-        cameraButton.style.backgroundColor = videoTrack.enabled ? 'green' : 'red';
-    }
+    const videoTrack = localStream.getVideoTracks()[0];
+    videoTrack.enabled = !videoTrack.enabled;
+    cameraButton.style.backgroundColor = videoTrack.enabled ? 'green' : 'red';
 });
 
 micButton.addEventListener('click', () => {
-    if (localStream) {
-        const audioTrack = localStream.getAudioTracks()[0];
-        audioTrack.enabled = !audioTrack.enabled;
-        micButton.style.backgroundColor = audioTrack.enabled ? 'green' : 'red';
-    }
+    const audioTrack = localStream.getAudioTracks()[0];
+    audioTrack.enabled = !audioTrack.enabled;
+    micButton.style.backgroundColor = audioTrack.enabled ? 'green' : 'red';
 });
 
 screenButton.addEventListener('click', async () => {
@@ -109,40 +82,71 @@ screenButton.addEventListener('click', async () => {
 
         for (let id in peers) {
             const sender = peers[id].getSenders().find(s => s.track.kind === 'video');
-            if (sender) {
-                sender.replaceTrack(screenTrack);
-            }
+            sender.replaceTrack(screenTrack);
         }
 
-        // Mostrar también la pantalla compartida en local
-        localVideo.srcObject = screenStream;
-
         screenTrack.onended = async () => {
-            const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
             const cameraTrack = cameraStream.getVideoTracks()[0];
-
             for (let id in peers) {
                 const sender = peers[id].getSenders().find(s => s.track.kind === 'video');
-                if (sender) {
-                    sender.replaceTrack(cameraTrack);
-                }
+                sender.replaceTrack(cameraTrack);
             }
-            localVideo.srcObject = cameraStream;
-            localStream = cameraStream;
         };
     } catch (error) {
         console.error('Error compartiendo pantalla:', error);
     }
 });
 
-startCamera();
+snapshotButton.addEventListener('click', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = localVideo.videoWidth;
+    canvas.height = localVideo.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(localVideo, 0, 0, canvas.width, canvas.height);
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = 'captura.png';
+    link.click();
+});
 
-// Mostrar fecha y hora de última actualización
-const updateInfo = document.createElement('div');
-updateInfo.textContent = `Última actualización: ${new Date().toLocaleString()}`;
-updateInfo.style.position = 'fixed';
-updateInfo.style.bottom = '5px';
-updateInfo.style.right = '10px';
-updateInfo.style.fontSize = '12px';
-updateInfo.style.color = 'gray';
-document.body.appendChild(updateInfo);
+socket.on('connect', () => {
+    socket.emit('nuevo-usuario');
+});
+
+socket.on('usuarios', usuarios => {
+    usuarios.forEach(id => {
+        if (id !== socket.id && !peers[id]) {
+            callUser(id);
+        }
+    });
+});
+
+socket.on('offer', async data => {
+    const peerConnection = createPeerConnection(data.from);
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    socket.emit('answer', { to: data.from, answer: peerConnection.localDescription });
+});
+
+socket.on('answer', async data => {
+    await peers[data.from].setRemoteDescription(new RTCSessionDescription(data.answer));
+});
+
+socket.on('candidate', async data => {
+    if (peers[data.from]) {
+        await peers[data.from].addIceCandidate(new RTCIceCandidate(data.candidate));
+    }
+});
+
+// Fecha y hora en pantalla
+function updateTimestamp() {
+    const now = new Date();
+    const options = { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    const formatted = now.toLocaleTimeString('es-CO', options);
+    document.getElementById('timestamp').textContent = `Actualización: ${formatted}`;
+}
+setInterval(updateTimestamp, 1000);
+
+startCamera();
