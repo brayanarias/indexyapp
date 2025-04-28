@@ -2,86 +2,62 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consciencia Superior - Videollamadas</title>
+    <title>Conexión Multipantalla</title>
     <style>
         body {
+            background-color: #f0f2f5;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: flex-start;
-            min-height: 100vh;
-            margin: 0;
-            background-color: #f0f0f0;
-            font-family: Arial, sans-serif;
         }
-
-        #localVideo {
-            width: 300px;
-            height: 300px;
-            border: 2px solid blue;
-            margin-top: 20px;
-            background: black;
+        #controls {
+            margin-bottom: 10px;
         }
-
-        #remoteVideosContainer {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            margin-top: 20px;
-            gap: 10px;
-        }
-
         button {
-            margin: 10px;
-            padding: 12px 20px;
-            font-size: 16px;
+            border-radius: 20px;
             border: none;
-            border-radius: 12px;
+            padding: 10px 20px;
+            margin: 0 5px;
+            font-size: 16px;
             cursor: pointer;
-            color: white;
         }
-
-        #cameraButton {
-            background-color: green;
+        #localVideo, .remoteVideo {
+            width: 300px;
+            height: 200px;
+            margin: 5px;
+            background-color: black;
+            border-radius: 10px;
         }
-
-        #micButton {
-            background-color: green;
-        }
-
-        #screenButton {
-            background-color: green;
-        }
-
-        button:active {
-            transform: scale(0.95);
-        }
-
-        .controls {
-            margin-top: 20px;
+        #videos {
             display: flex;
-            gap: 10px;
             flex-wrap: wrap;
             justify-content: center;
+        }
+        #timestamp {
+            position: fixed;
+            bottom: 5px;
+            right: 10px;
+            font-size: 12px;
+            color: #555;
         }
     </style>
 </head>
 <body>
-
-    <h1>Videollamada en Consciencia Superior</h1>
-
-    <video id="localVideo" autoplay muted playsinline></video>
-
-    <div class="controls">
-        <button id="cameraButton">Cámara</button>
-        <button id="micButton">Micrófono</button>
-        <button id="screenButton">Compartir pantalla</button>
+    <div id="controls">
+        <button id="cameraButton" style="background-color: green;">Cámara</button>
+        <button id="micButton" style="background-color: green;">Micrófono</button>
+        <button id="screenButton" style="background-color: green;">Compartir Pantalla</button>
+        <button id="snapshotButton" style="background-color: blue;">Captura</button>
     </div>
+    <div id="videos">
+        <video id="localVideo" autoplay muted playsinline></video>
+    </div>
+    <div id="timestamp"></div>
 
-    <div id="remoteVideosContainer"></div>
-
+    <script src="/socket.io/socket.io.js"></script>
     <script src="app.js"></script>
-
 </body>
 </html>
